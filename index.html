@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lessons</title>
+<link rel="icon" href="tutor.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#FFFFFF; --dot:#DCE1EA; --surface:#FFFFFF; --stage:#EAEEF6; --ink:#1A1D29; --muted:#5A6072;
+  --line:#DDE2EC; --chip:#F1F3F8; --press:#1A1D29; --press-ink:#FFFFFF; --accent:#FF5F00; --accent-soft:#FF9253;
+  --good:#16A05A; --good-bg:#E3F6EB; --bad:#E0434A; --bad-bg:#FDE8E9; --link:#B9C1D3;
+  --shadow:0 1px 0 rgba(26,29,41,.05), 0 10px 30px -14px rgba(26,29,41,.25);
+  color-scheme: light; box-sizing:border-box;
+}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font-family:"Outfit",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.5;font-weight:500;-webkit-font-smoothing:antialiased}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+/* ---------- canvas ---------- */
+#viewport{position:fixed;inset:0;overflow:hidden;touch-action:none;cursor:grab;background-image:radial-gradient(var(--dot) 1.2px, transparent 1.3px);background-size:24px 24px}
+#viewport.panning{cursor:grabbing}
+#world{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
+#links{position:absolute;left:0;top:0;width:1px;height:1px;overflow:visible;pointer-events:none;transition:opacity .4s}
+#links path{fill:none;stroke:var(--link);stroke-width:2.5;stroke-linecap:round}
+#links path.dash{stroke-dasharray:6 8}
+.node{position:absolute;background:var(--surface);border:1.5px solid var(--line);border-radius:22px;box-shadow:var(--shadow);cursor:default;transition:border-color .2s, opacity .4s, filter .4s}
+.node.active{border-color:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent), var(--shadow)}
+.node.locked{opacity:.55}
+.node.locked .q-body{pointer-events:none}
+.node.hidden{display:none}
+#world.focus-mode .node:not(.active){opacity:.12;filter:blur(3px)}
+#world.focus-mode .node.vis:not(.active){filter:none;opacity:.06}
+#world.focus-mode .node.vis:not(.active) canvas{visibility:hidden}
+#world.focus-mode #links{opacity:.25}
+.node-label{position:absolute;left:4px;top:-30px;font-size:14px;font-weight:700;color:var(--muted);cursor:grab;padding:4px 8px 4px 4px;border-radius:8px;white-space:nowrap;user-select:none;display:flex;gap:6px;align-items:center}
+.node-label:hover{color:var(--ink);background:var(--surface)}
+.node-label svg{opacity:.6}
+.node-pad{padding:22px 24px 24px}
+
+/* hero visuals: no frame, no box */
+.node.vis{background:transparent;border:0;box-shadow:none;border-radius:0}
+.node.vis.active{box-shadow:none}
+.vwrap{position:relative;width:100%;height:100%}
+.vstage{position:absolute;inset:0}
+.vwrap.haspanel .vstage{right:290px}
+.vstage canvas{display:block;width:100%;height:100%;cursor:grab;touch-action:none}
+.vstage canvas.pointing{cursor:pointer}
+.vpic{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.vpic svg{width:100%;height:100%}
+.vpanel{position:absolute;right:0;top:50%;transform:translateY(-50%);width:272px;background:var(--surface);border:1.5px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:16px;display:flex;flex-direction:column;gap:14px;max-height:100%;overflow:auto}
+.tags{position:absolute;inset:0;pointer-events:none;overflow:visible}
+.tag{position:absolute;left:0;top:0;transform:translate(-50%,-100%);background:var(--press);color:var(--press-ink);font-weight:700;font-size:15px;padding:6px 12px;border-radius:12px;white-space:nowrap;transition:opacity .3s}
+.tag::after{content:"";position:absolute;left:50%;bottom:-5px;width:10px;height:10px;background:inherit;transform:translateX(-50%) rotate(45deg);border-radius:2px;z-index:-1}
+.tag.accent{background:var(--accent);color:#fff}
+.tag.light{background:#fff;color:var(--ink);box-shadow:0 2px 10px rgba(26,29,41,.12)}
+
+h2{font-size:26px;line-height:1.15;font-weight:800;letter-spacing:-.015em;margin:0 0 12px}
+h3{font-size:19px;line-height:1.3;font-weight:800;margin:0 0 12px}
+.lesson p{margin:0 0 12px}
+.lesson p:last-child{margin:0}
+.lesson ul{margin:0 0 12px;padding-left:20px}
+.lesson li{margin:3px 0}
+.lesson b{font-weight:800}
+.formula{background:var(--chip);border-radius:14px;padding:12px 14px;font-weight:700;margin:0 0 12px}
+table.cmp{width:100%;border-collapse:collapse;font-size:14.5px}
+table.cmp th,table.cmp td{text-align:left;padding:7px 8px;border-bottom:1.5px solid var(--line);vertical-align:top}
+table.cmp th{color:var(--muted);font-weight:700}
+table.cmp td:first-child{font-weight:700}
+
+/* panel controls (used by some visuals) */
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px}
+.seg button{border:1.5px solid var(--line);background:var(--chip);border-radius:12px;padding:7px 0;font-weight:700}
+.seg button[aria-pressed="true"]{background:var(--press);color:var(--press-ink);border-color:var(--press)}
+.lbl{font-weight:700;font-size:14px;margin-bottom:6px;display:flex;justify-content:space-between}
+.lbl span{color:var(--muted);font-weight:500}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.info .name{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;margin-bottom:4px}
+.info .sw{width:22px;height:22px;border-radius:7px;box-shadow:inset 0 -3px 0 rgba(0,0,0,.15);flex:none}
+.info p{margin:0 0 6px;font-size:14.5px}
+.info .k{color:var(--muted);font-weight:700;font-size:13px;display:block}
+.info .empty{color:var(--muted);font-size:14.5px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:7px;border:1.5px solid var(--line);background:var(--chip);border-radius:999px;padding:4px 10px 4px 6px;font-weight:700;font-size:13px}
+.chip i{width:12px;height:12px;border-radius:50%;display:block}
+.chip[aria-pressed="true"]{border-color:var(--ink)}
+.feat{display:grid;gap:6px}
+.feat button{text-align:left;border:1.5px solid var(--line);background:var(--chip);border-radius:12px;padding:7px 12px;font-weight:700;font-size:14px}
+.feat button[aria-pressed="true"]{background:var(--press);color:var(--press-ink);border-color:var(--press)}
+.lens{display:grid;justify-items:center;gap:8px}
+.lens-wrap{width:180px;height:180px;border-radius:50%;overflow:hidden;background:#111;box-shadow:0 0 0 7px var(--chip),0 0 0 8.5px var(--line)}
+.lens-wrap canvas{width:100%;height:100%;display:block}
+.calc{font-size:16px;font-weight:700;text-align:center}
+.calc b{color:var(--accent)}
+
+/* quiz */
+.opts{display:grid;gap:8px}
+.opt{display:flex;gap:12px;align-items:center;text-align:left;border:1.5px solid var(--line);background:var(--surface);border-radius:14px;padding:11px 14px;font-weight:600;box-shadow:0 2px 0 var(--line);transition:transform .08s}
+.opt:hover:not(:disabled){border-color:var(--ink)}
+.opt:active:not(:disabled){transform:translateY(2px);box-shadow:none}
+.opt .key{flex:none;width:26px;height:26px;border-radius:8px;background:var(--chip);display:grid;place-items:center;font-size:13px;font-weight:800}
+.opt:disabled{cursor:default}
+.opt.right{border-color:var(--good);background:var(--good-bg);box-shadow:0 2px 0 var(--good)}
+.opt.wrong{border-color:var(--bad);background:var(--bad-bg);box-shadow:0 2px 0 var(--bad)}
+.num{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.num .unit{font-weight:700;color:var(--muted)}
+.num input{width:130px;border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--surface);font-weight:700;font-size:18px}
+.num input.right{border-color:var(--good);background:var(--good-bg)}
+.num input.wrong{border-color:var(--bad);background:var(--bad-bg)}
+.btn{border:0;background:var(--press);color:var(--press-ink);border-radius:12px;padding:10px 18px;font-weight:800}
+.btn:disabled{opacity:.35;cursor:default}
+.btn.ghost{background:var(--chip);color:var(--ink);border:1.5px solid var(--line)}
+.fb{margin-top:12px;border-radius:14px;padding:12px 14px;font-weight:600;display:none}
+.fb.show{display:block}
+.fb.right{background:var(--good-bg)}
+.fb.wrong{background:var(--bad-bg)}
+.fb strong{display:block;font-weight:800}
+.fb.right strong{color:var(--good)}
+.fb.wrong strong{color:var(--bad)}
+.q-actions{margin-top:12px;display:flex;justify-content:flex-end}
+.q-actions[hidden]{display:none}
+.rev-kicker{color:var(--accent);font-weight:800;font-size:14px;margin-bottom:4px}
+.done-score{font-size:56px;font-weight:800;letter-spacing:-.03em;line-height:1}
+
+/* ---------- HUD ---------- */
+.topbar{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);display:flex;gap:4px;align-items:center;background:var(--surface);border:1.5px solid var(--line);border-radius:999px;padding:5px;box-shadow:var(--shadow);z-index:7}
+.switch{position:relative}
+.switch>button{border:0;background:var(--chip);border-radius:999px;padding:6px 12px 6px 14px;font-weight:800;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.switch>button svg{transition:rotate .2s}
+.switch.open>button svg{rotate:180deg}
+.menu{position:absolute;top:calc(100% + 10px);left:0;min-width:300px;background:var(--surface);border:1.5px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:6px;display:none}
+.switch.open .menu{display:block}
+.menu a{display:flex;flex-direction:column;padding:10px 12px;border-radius:12px;text-decoration:none;color:var(--ink);font-weight:700}
+.menu a span{font-size:13px;color:var(--muted);font-weight:600}
+.menu a:hover{background:var(--chip)}
+.menu a[aria-current="true"]{background:#FFF1E8}
+.stepbtn{border:0;background:transparent;border-radius:999px;padding:6px 12px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:8px;white-space:nowrap}
+.stepbtn .n{width:22px;height:22px;border-radius:50%;background:var(--chip);display:grid;place-items:center;font-size:12.5px;font-weight:800}
+.stepbtn.current{background:var(--press);color:var(--press-ink)}
+.stepbtn.current .n{background:var(--accent);color:#fff}
+.stepbtn.done .n{background:var(--good);color:#fff}
+.zoom{position:fixed;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));display:flex;gap:2px;background:var(--surface);border:1.5px solid var(--line);border-radius:14px;padding:4px;box-shadow:var(--shadow);z-index:5}
+.zoom button{border:0;background:transparent;border-radius:10px;min-width:36px;height:34px;font-weight:800;padding:0 8px}
+.zoom button:hover{background:var(--chip)}
+.zoom .pct{min-width:56px;font-weight:700;color:var(--muted)}
+
+.tutor{position:fixed;left:calc(18px + env(safe-area-inset-left,0px));bottom:calc(18px + env(safe-area-inset-bottom,0px));width:360px;z-index:6;display:flex;flex-direction:column;align-items:flex-start}
+.avatar{width:150px;height:auto;margin:0 0 -6px 18px;filter:drop-shadow(0 14px 14px rgba(0,0,0,.18));animation:float 3.6s ease-in-out infinite;transform-origin:50% 90%;pointer-events:none;user-select:none}
+.tutor.talking .avatar{animation:float 3.6s ease-in-out infinite, talk .32s ease-in-out infinite alternate}
+@keyframes float{0%,100%{translate:0 0}50%{translate:0 -8px}}
+@keyframes talk{from{scale:1 1}to{scale:1.04 .95}}
+@property --ga{syntax:"<angle>";initial-value:0deg;inherits:false}
+@property --gp{syntax:"<percentage>";initial-value:5%;inherits:false}
+.panel-wrap{position:relative;width:100%}
+.panel-wrap::before{content:"";position:absolute;inset:-3px;border-radius:26px;pointer-events:none;opacity:0;transition:opacity .5s;
+  background:conic-gradient(from var(--ga),transparent,var(--accent) 12%,var(--accent-soft) 24%,var(--accent) 36%,transparent 50%,var(--accent) 62%,var(--accent-soft) 74%,var(--accent) 86%,transparent);
+  filter:blur(18px);animation:gleam 3s linear infinite}
+.panel{position:relative;width:100%;border-radius:22px;padding:16px;box-shadow:var(--shadow);border:1.5px solid var(--accent);background:var(--surface)}
+.tutor.talking .panel, .tutor.thinking .panel{border:2px solid transparent;padding:15.5px;
+  background:linear-gradient(var(--surface),var(--surface)) padding-box,
+    conic-gradient(from var(--ga),transparent,var(--accent) var(--gp),#fff calc(var(--gp)*2),var(--accent) calc(var(--gp)*3),transparent calc(var(--gp)*4)) border-box,
+    conic-gradient(from calc(var(--ga) + 180deg),transparent,var(--accent) var(--gp),var(--accent-soft) calc(var(--gp)*2),var(--accent) calc(var(--gp)*3),transparent calc(var(--gp)*4)) border-box,
+    linear-gradient(color-mix(in srgb,var(--accent) 35%,transparent),color-mix(in srgb,var(--accent) 35%,transparent)) border-box;
+  --gp:12%;animation:gleam 2.2s linear infinite}
+.tutor.talking .panel-wrap::before, .tutor.thinking .panel-wrap::before{opacity:.5}
+@keyframes gleam{to{--ga:360deg}}
+.bubble{font-size:17px;line-height:1.5;min-height:74px;max-height:30vh;overflow:auto;font-weight:600}
+.bubble .you{display:block;color:var(--muted);font-size:14px;font-weight:600;margin-bottom:4px}
+.nav{display:flex;gap:8px;margin-top:12px}
+.nav .btn{flex:1}
+.nav .btn.ghost{flex:0 0 auto}
+.ask{display:flex;gap:6px;margin-top:10px;border-top:1.5px solid var(--line);padding-top:10px}
+.ask input{flex:1;min-width:0;border:1.5px solid var(--line);border-radius:12px;padding:9px 12px;background:var(--chip);font-weight:500}
+.ask input:focus{outline:none;border-color:var(--accent);background:var(--surface)}
+.ask button{border:0;border-radius:12px;background:var(--accent);color:#fff;width:42px;display:grid;place-items:center;flex:none}
+.ask button:disabled{opacity:.5}
+@media (max-width:760px){
+  .tutor{left:8px;right:8px;width:auto;bottom:calc(8px + env(safe-area-inset-bottom,0px))}
+  .avatar{width:74px;margin-left:10px}
+  .bubble{min-height:48px;max-height:22vh;font-size:15.5px}
+  .stepbtn .lab{display:none}
+  .zoom{top:calc(66px + env(safe-area-inset-top,0px));bottom:auto;right:8px}
+  .zoom .pct,.zoom #zBack{display:none}
+  .topbar{left:8px;right:8px;transform:none;overflow-x:auto}
+  .menu{position:fixed;left:8px;right:8px;top:70px;min-width:0}
+}
+@media (prefers-reduced-motion: reduce){ .avatar,.panel,.panel-wrap::before{animation:none!important} }
+</style>
+</head>
+<body>
+<div id="viewport" aria-label="Lesson canvas"><div id="world"><svg id="links"></svg></div></div>
+
+<nav class="topbar" aria-label="Lesson">
+  <div class="switch" id="switch">
+    <button id="switchBtn" aria-haspopup="true" aria-expanded="false"><span id="lessonName">Lesson</span>
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4.5 6 8.5 10 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <div class="menu" id="menu" role="menu"></div>
+  </div>
+  <div id="steps" style="display:flex;gap:2px"></div>
+</nav>
+
+<div class="zoom" aria-label="Zoom">
+  <button id="zOut" aria-label="Zoom out">−</button>
+  <button id="zPct" class="pct" aria-label="Fit whole lesson">100%</button>
+  <button id="zIn" aria-label="Zoom in">+</button>
+  <button id="zBack" aria-label="Back to the tutor’s spot">Recenter</button>
+</div>
+
+<div class="tutor" id="tutor">
+  <img class="avatar" src="tutor.png" alt="Your tutor">
+  <div class="panel-wrap"><div class="panel">
+    <div class="bubble" id="bubble" aria-live="polite"></div>
+    <div class="nav"><button class="btn ghost" id="backBtn">Back</button><button class="btn" id="nextBtn">Next</button></div>
+    <form class="ask" id="askForm" hidden style="display:none" autocomplete="off">
+      <input id="askInput" maxlength="400" aria-label="Type a question for the tutor">
+      <button id="askBtn" type="submit" aria-label="Send question"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 9h11M9.5 4.5 14 9l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </form>
+  </div></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/geometries/RoundedBoxGeometry.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>
+<script src="kit.js"></script>
+<script src="cell.js"></script>
+<script src="movement.js"></script>
+<script src="elements.js"></script>
+<script src="waves.js"></script>
+<script>
+(function(){
+"use strict";
+const K=window.KIT, THREE=K.THREE, $=id=>document.getElementById(id), esc=K.esc, ease=K.ease, tween=K.tween;
+const ORDER=['cell','movement','elements','waves'];
+const params=new URLSearchParams(location.search);
+const LESSON=window.LESSONS[params.get('lesson')]||window.LESSONS.cell;
+document.title=LESSON.title;
+
+/* =====================================================================
+   VISUALS: 3D models and flat pictures, both drawn frameless
+   ===================================================================== */
+const camState={x:0,y:0,s:1}; let camMoving=false;
+class Visual3D{
+  constructor(host, def, panel){
+    this.def=def; this.host=host; this.parts={}; this.sel=[]; this.hover=null; this.tags=[]; this.hlTags=[]; this.lastScale=0;
+    const r=this.renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+    r.setPixelRatio(Math.min(devicePixelRatio,2)); r.outputEncoding=THREE.sRGBEncoding;
+    r.shadowMap.enabled=true; r.shadowMap.type=THREE.PCFSoftShadowMap; r.localClippingEnabled=true;
+    host.prepend(r.domElement);
+    this.tagsEl=document.createElement('div'); this.tagsEl.className='tags'; host.appendChild(this.tagsEl);
+    const scene=this.scene=new THREE.Scene();
+    this.camera=new THREE.PerspectiveCamera(35,1,0.1,100);
+    const c=this.controls=new THREE.OrbitControls(this.camera,r.domElement);
+    c.enableDamping=true; c.enablePan=false; c.enableZoom=false; c.maxPolarAngle=1.48;
+    c.autoRotate=!!def.autoRotate; c.autoRotateSpeed=0.6; c.addEventListener('start',()=>{ c.autoRotate=false; });
+    scene.add(new THREE.HemisphereLight(0xffffff,0xc9d2e6,0.85));
+    const sun=new THREE.DirectionalLight(0xffffff,0.95); sun.position.set(4,9,5); sun.castShadow=true;
+    sun.shadow.mapSize.set(1536,1536); Object.assign(sun.shadow.camera,{left:-7,right:7,top:7,bottom:-7,near:1,far:30}); sun.shadow.bias=-0.0005; scene.add(sun);
+    const rim=new THREE.DirectionalLight(0xffffff,0.35); rim.position.set(-5,3,-4); scene.add(rim);
+    const ground=new THREE.Mesh(new THREE.PlaneGeometry(60,60),new THREE.ShadowMaterial({opacity:0.12}));
+    ground.rotation.x=-Math.PI/2; ground.position.y=K.GY; ground.receiveShadow=true; scene.add(ground);
+    this.clip=new THREE.Plane(new THREE.Vector3(0,-1,0),99);
+    this.group=new THREE.Group(); scene.add(this.group);
+    const self=this;
+    this.ctx={ group:this.group, scene, camera:this.camera, controls:c, clip:this.clip, panel, host, GY:K.GY,
+      tag(text,cls,at){ const el=document.createElement('div'); el.className='tag '+(cls||''); el.textContent=text; self.tagsEl.appendChild(el); const t={el,at,show:true}; self.tags.push(t); return t; },
+      part(obj,id,info){ obj.userData.part=id; const p=self.parts[id]||(self.parts[id]={id,materials:[]}); if(info) Object.assign(p,info);
+        (Array.isArray(obj.material)?obj.material:[obj.material]).forEach(m=>{ if(m&&m.emissive&&!p.materials.includes(m)) p.materials.push(m); }); return p; },
+      highlight(ids,tags){ self.highlight(ids,tags); },
+      onSelect:null, onPick:null };
+    this.api=def.build(this.ctx)||{};
+    /* only metals get reflections: cheap for everything else, even on weak devices */
+    let env=null; this.group.traverse(o=>{ (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{ if(m&&m.metalness>0.5){ env=env||new THREE.PMREMGenerator(r).fromScene(new THREE.RoomEnvironment(),0.04).texture; m.envMap=env; m.needsUpdate=true; } }); });
+    this.bindPicking();
+    new ResizeObserver(()=>this.resize()).observe(host); this.resize();
+  }
+  highlight(ids,tags){
+    this.sel=(ids||[]).filter(id=>this.parts[id]);
+    this.hlTags.forEach(t=>t.el.remove()); this.hlTags=[];
+    const list=tags||this.sel.map(id=>({id,text:this.parts[id].name}));
+    list.forEach(t=>{ if(!t.text) return; const el=document.createElement('div'); el.className='tag'; el.textContent=t.text; this.tagsEl.appendChild(el);
+      this.hlTags.push({el,show:true,at:t.pos?(()=>new THREE.Vector3(...t.pos)):(()=>{ const p=this.parts[t.id]; return p.anchor?p.anchor.clone().applyMatrix4(p.group?p.group.matrixWorld:this.group.matrixWorld):new THREE.Vector3(); })}); });
+    this.ctx.onSelect&&this.ctx.onSelect(this.sel[0]||null);
+  }
+  step(i){ this.api.step&&this.api.step(i); }
+  fit(){
+    const d=this.def;
+    if(d.fit===false){ this.camera.position.set(...d.cam); this.controls.target.set(...d.target); this.controls.update(); return; }
+    const box=new THREE.Box3().setFromObject(this.group); if(d.bounds) box.union(new THREE.Box3(new THREE.Vector3(...d.bounds[0]),new THREE.Vector3(...d.bounds[1])));
+    const ctr=box.getCenter(new THREE.Vector3());
+    const dir=new THREE.Vector3(...(d.cam||[0,2,6])).sub(new THREE.Vector3(...(d.target||[0,0,0]))).normalize();
+    const fwd=dir.clone().negate(), right=new THREE.Vector3().crossVectors(fwd,new THREE.Vector3(0,1,0)).normalize(), up=new THREE.Vector3().crossVectors(right,fwd);
+    const tv=Math.tan(THREE.MathUtils.degToRad(this.camera.fov)/2), th=tv*this.camera.aspect, m=0.96; let dist=0; const p=new THREE.Vector3();
+    for(let i=0;i<8;i++){ p.set(i&1?box.max.x:box.min.x,i&2?box.max.y:box.min.y,i&4?box.max.z:box.min.z).sub(ctr);
+      const z=p.dot(dir), x=Math.abs(p.dot(right)), y=p.dot(up); dist=Math.max(dist,z+x/(th*m),z+(y>0?y/(tv*m*0.9):-y/(tv*m))); }
+    this.controls.target.copy(ctr); this.camera.position.copy(ctr).addScaledVector(dir,dist); this.controls.update();
+  }
+  resize(){ const w=this.host.clientWidth,h=this.host.clientHeight; if(!w||!h) return; this.renderer.setSize(w,h,false); this.camera.aspect=w/h; this.camera.updateProjectionMatrix(); this.fit(); }
+  sharpen(){ const want=Math.min(2,devicePixelRatio*Math.max(1,camState.s)); if(Math.abs(want-this.lastScale)/want>0.12){ this.lastScale=want; this.renderer.setPixelRatio(want); this.renderer.setSize(this.host.clientWidth,this.host.clientHeight,false); } }
+  bindPicking(){
+    const el=this.renderer.domElement, ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
+    const pick=ev=>{ const r=el.getBoundingClientRect(); ndc.set(((ev.clientX-r.left)/r.width)*2-1,-((ev.clientY-r.top)/r.height)*2+1); ray.setFromCamera(ndc,this.camera);
+      for(const h of ray.intersectObject(this.group,true)){ const o=h.object; if(!o.visible||o.userData.noPick) continue; let vis=true; o.traverseAncestors(a=>{ if(!a.visible) vis=false; }); if(!vis) continue;
+        const cp=!Array.isArray(o.material)&&o.material.clippingPlanes; if(cp&&cp.some(pl=>pl.distanceToPoint(h.point)<-1e-3)) continue;
+        if(o.userData.part&&this.parts[o.userData.part].name) return o; } return null; };
+    let down=null;
+    el.addEventListener('pointerdown',e=>{ down=[e.clientX,e.clientY]; });
+    el.addEventListener('pointerup',e=>{ if(!down) return; const mv=Math.hypot(e.clientX-down[0],e.clientY-down[1]); down=null; if(mv>6) return;
+      const o=pick(e); if(this.ctx.onPick&&this.ctx.onPick(o)) return; if(!Object.keys(this.parts).some(k=>this.parts[k].name)) return; this.highlight(o?[o.userData.part]:[]); this.controls.autoRotate=false; });
+    el.addEventListener('pointermove',e=>{ if(e.buttons) return; const o=pick(e); this.hover=o?o.userData.part:null; el.classList.toggle('pointing',!!o); });
+    el.addEventListener('pointerleave',()=>{ this.hover=null; });
+  }
+  onScreen(){ const r=this.host.getBoundingClientRect(); return r.right>0&&r.bottom>0&&r.left<innerWidth&&r.top<innerHeight&&r.width>2; }
+  frame(dt,t,now,live){
+    if(!this.onScreen()) return;
+    if(!live&&this.drawn) return; this.drawn=true;
+    if(!camMoving) this.sharpen();
+    this.api.update&&this.api.update(dt,t);
+    const pulse=0.22+0.12*Math.sin(now/260);
+    Object.values(this.parts).forEach(p=>{ const on=this.sel.includes(p.id), hv=p.id===this.hover;
+      p.materials.forEach(m=>{ if(m.userData.glow&&!on&&!hv){ m.emissive.set(m.userData.glow); m.emissiveIntensity=.35; return; } m.emissive.set(on||hv?'#ffffff':'#000000'); m.emissiveIntensity=on?pulse:hv?0.12:0; }); });
+    const w=this.host.clientWidth,h=this.host.clientHeight, v=new THREE.Vector3(), tagScale=Math.min(1.7,Math.max(1,1/camState.s)).toFixed(3);
+    [...this.tags,...this.hlTags].forEach(tg=>{ v.copy(tg.at()).project(this.camera);
+      tg.el.style.left=((v.x*.5+.5)*w)+'px'; tg.el.style.top=((-v.y*.5+.5)*h-8)+'px'; tg.el.style.transformOrigin=tg.below?'50% 0':'50% 100%'; tg.el.style.transform=`translate(-50%,${tg.below?'0':'-100%'}) scale(${tagScale})`; tg.el.style.opacity=(tg.show&&v.z<1)?1:0; });
+    this.controls.update(); this.renderer.render(this.scene,this.camera);
+  }
+}
+/* 3D visuals start up only when first needed, so lessons open fast on slower devices */
+class Lazy3D{
+  constructor(host,def,panel){ this.host=host; this.def=def; this.panel=panel; this.v=null; this.pending=0; }
+  ensure(){ if(!this.v){ this.v=new Visual3D(this.host,this.def,this.panel); this.v.step(this.pending); } return this.v; }
+  get api(){ return this.ensure().api; }
+  step(i){ this.pending=i; if(this.v) this.v.step(i); }
+  frame(...a){ if(this.v) this.v.frame(...a); }
+}
+class VisualPic{
+  constructor(host,def){ this.def=def; this.host=host; this.api={}; this.step(0); }
+  step(i){ const p=this.def.pics; this.host.innerHTML=p[Math.min(i,p.length-1)](); }
+  frame(){}
+}
+
+/* =====================================================================
+   CANVAS
+   ===================================================================== */
+const viewport=$('viewport'), world=$('world'), linksSvg=$('links');
+const cam=camState; let camTween=null;
+function applyCam(){ world.style.transform=`translate(${cam.x}px,${cam.y}px) scale(${cam.s})`; viewport.style.backgroundSize=`${24*cam.s}px ${24*cam.s}px`; viewport.style.backgroundPosition=`${cam.x}px ${cam.y}px`; $('zPct').textContent=Math.round(cam.s*100)+'%'; }
+const NODES={}, LINKS=[];
+function addNode(id,x,y,w,label,html,cls='',h){
+  const el=document.createElement('section'); el.className='node '+cls; el.style.left=x+'px'; el.style.top=y+'px'; el.style.width=w+'px'; if(h) el.style.height=h+'px';
+  el.innerHTML=`<div class="node-label"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M1 3h10M1 6h10M1 9h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>${esc(label)}</div>${html}`;
+  world.appendChild(el); const n=NODES[id]={id,el,x,y,w};
+  const lab=el.querySelector('.node-label');
+  lab.addEventListener('pointerdown',e=>{ e.stopPropagation(); unfocus(); lab.setPointerCapture(e.pointerId); let px=e.clientX,py=e.clientY;
+    const mv=ev=>{ n.moved=true; n.x+=(ev.clientX-px)/cam.s; n.y+=(ev.clientY-py)/cam.s; px=ev.clientX; py=ev.clientY; el.style.left=n.x+'px'; el.style.top=n.y+'px'; drawLinks(); };
+    const up=()=>{ lab.removeEventListener('pointermove',mv); lab.removeEventListener('pointerup',up); };
+    lab.addEventListener('pointermove',mv); lab.addEventListener('pointerup',up); });
+  return n;
+}
+const rectOf=n=>({x:n.x,y:n.y,w:n.el.offsetWidth,h:n.el.offsetHeight});
+function drawLinks(){
+  linksSvg.innerHTML=LINKS.filter(([a,b])=>NODES[a]&&NODES[b]&&!NODES[a].el.classList.contains('hidden')&&!NODES[b].el.classList.contains('hidden')).map(([a,b,dash])=>{
+    const A=rectOf(NODES[a]),B=rectOf(NODES[b]); let d;
+    if(B.x>=A.x+A.w-10){ const x1=A.x+A.w,y1=A.y+Math.min(A.h/2,200),x2=B.x,y2=B.y+Math.min(B.h/2,200),m=(x2-x1)/2; d=`M${x1} ${y1}C${x1+m} ${y1} ${x2-m} ${y2} ${x2} ${y2}`; }
+    else { const x1=A.x+A.w/2,y1=A.y+A.h,x2=B.x+B.w/2,y2=B.y-34,m=(y2-y1)/2; d=`M${x1} ${y1}C${x1} ${y1+m} ${x2} ${y2-m} ${x2} ${y2}`; }
+    return `<path class="${dash?'dash':''}" d="${d}"/>`; }).join('');
+}
+function availRect(){ const W=innerWidth,H=innerHeight; if(W<=760){ const t=$('tutor').getBoundingClientRect(); return {x:8,y:112,w:W-16,h:Math.max(160,t.top-120)}; } return {x:392,y:72,w:W-400,h:H-84}; }
+function flyToRect(R,dur=750,o={}){
+  const A=availRect(), pad=o.pad??30, maxS=o.maxS??1.05;
+  let s=Math.min(A.w/(R.w+pad*2),A.h/(R.h+pad*2),maxS); s=Math.max(s,0.2);
+  const tx=A.x+(A.w-R.w*s)/2-R.x*s, ty=A.y+Math.max(0,(A.h-R.h*s)/2)-R.y*s+(R.h*s>A.h?pad*s:0);
+  const f={...cam}; if(camTween) camTween.dead=true; camMoving=true;
+  camTween=tween(dur,t=>{ const e=ease(t); cam.x=f.x+(tx-f.x)*e; cam.y=f.y+(ty-f.y)*e; cam.s=f.s+(s-f.s)*e; applyCam(); },()=>{ camMoving=false; });
+}
+let focusId=null;
+function unfocus(){ world.classList.remove('focus-mode'); }
+function fly(id){ if(!NODES[id]) return; focusId=id; if(id.startsWith('vis-')&&VIS[id.slice(4)].ensure) VIS[id.slice(4)].ensure(); world.classList.add('focus-mode'); Object.values(NODES).forEach(n=>n.el.classList.toggle('active',n.id===id));
+  const vis=NODES[id].el.classList.contains('vis'); flyToRect(rectOf(NODES[id]),750,vis?{pad:4,maxS:1.9}:{}); }
+function fitAll(dur){ unfocus(); const ns=Object.values(NODES).filter(n=>!n.el.classList.contains('hidden')).map(rectOf);
+  const x0=Math.min(...ns.map(r=>r.x)),y0=Math.min(...ns.map(r=>r.y))-40,x1=Math.max(...ns.map(r=>r.x+r.w)),y1=Math.max(...ns.map(r=>r.y+r.h)); flyToRect({x:x0,y:y0,w:x1-x0,h:y1-y0},dur); }
+function zoomAt(cx,cy,f){ const s=Math.min(2.5,Math.max(0.12,cam.s*f)); cam.x=cx-(cx-cam.x)*(s/cam.s); cam.y=cy-(cy-cam.y)*(s/cam.s); cam.s=s; applyCam(); }
+const ptrs=new Map(); let pinch=null;
+viewport.addEventListener('pointerdown',e=>{ if(!(e.target===viewport||e.target===world||e.target===linksSvg)) return; if(camTween) camTween.dead=true; camMoving=false; unfocus();
+  viewport.setPointerCapture(e.pointerId); ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY}); viewport.classList.add('panning');
+  if(ptrs.size===2){ const [a,b]=[...ptrs.values()]; pinch={d:Math.hypot(a.x-b.x,a.y-b.y)}; } });
+viewport.addEventListener('pointermove',e=>{ if(!ptrs.has(e.pointerId)) return; const p=ptrs.get(e.pointerId);
+  if(ptrs.size===1){ cam.x+=e.clientX-p.x; cam.y+=e.clientY-p.y; applyCam(); } p.x=e.clientX; p.y=e.clientY;
+  if(ptrs.size===2&&pinch){ const [a,b]=[...ptrs.values()]; const d=Math.hypot(a.x-b.x,a.y-b.y); zoomAt((a.x+b.x)/2,(a.y+b.y)/2,d/pinch.d); pinch.d=d; } });
+const endPtr=e=>{ ptrs.delete(e.pointerId); if(ptrs.size<2) pinch=null; if(!ptrs.size) viewport.classList.remove('panning'); };
+viewport.addEventListener('pointerup',endPtr); viewport.addEventListener('pointercancel',endPtr);
+viewport.addEventListener('wheel',e=>{ e.preventDefault(); if(camTween) camTween.dead=true; camMoving=false; unfocus();
+  if(e.ctrlKey||e.metaKey) zoomAt(e.clientX,e.clientY,Math.exp(-e.deltaY*0.01)); else { cam.x-=e.deltaX; cam.y-=e.deltaY; applyCam(); } },{passive:false});
+$('zIn').onclick=()=>{ unfocus(); zoomAt(innerWidth/2,innerHeight/2,1.2); };
+$('zOut').onclick=()=>{ unfocus(); zoomAt(innerWidth/2,innerHeight/2,1/1.2); };
+$('zPct').onclick=()=>fitAll(700);
+$('zBack').onclick=()=>{ if(focusId) fly(focusId); };
+
+/* =====================================================================
+   BUILD THE BOARD FROM THE LESSON FILE
+   ===================================================================== */
+const VIS={}, VAPI={};
+const nodeOfVis=vid=>'vis-'+vid;
+function addVisual(vid,x,y){
+  const def=LESSON.visuals[vid], w=def.w||(def.kind==='pic'?920:1040), h=def.h||(def.kind==='pic'?560:600);
+  const html=def.kind==='pic'?`<div class="vwrap"><div class="vpic"></div></div>`:`<div class="vwrap ${def.panel?'haspanel':''}"><div class="vstage"></div>${def.panel?'<div class="vpanel"></div>':''}</div>`;
+  const n=addNode(nodeOfVis(vid),x,y,w,def.label,html,'vis',h);
+  const v=def.kind==='pic'?new VisualPic(n.el.querySelector('.vpic'),def):new Lazy3D(n.el.querySelector('.vstage'),def,n.el.querySelector('.vpanel'));
+  VIS[vid]=v; Object.defineProperty(VAPI,vid,{get:()=>v.api,enumerable:true}); return {w,h};
+}
+function sectionSteps(sec){
+  if(sec.steps) return sec.steps;
+  const out=[{fly:'lesson',say:sec.intro}];
+  sec.visuals.forEach(vid=>{ const d=LESSON.visuals[vid]; d.steps.forEach((cap,i)=>out.push({fly:vid,show:[vid,i],say:cap})); });
+  const last=sec.visuals[sec.visuals.length-1];
+  out.push({fly:last,say:sec.outro||'Take another look if you like. When you’re ready, let’s check what you remember.',next:'Start the quiz'});
+  return out;
+}
+LESSON.sections.forEach(sec=>{ sec._steps=sectionSteps(sec); });
+
+let X=0; const secX=[];
+LESSON.sections.forEach((sec,si)=>{
+  secX.push(X);
+  addNode(`${sec.id}-lesson`,X,0,430,`${si+1}. ${sec.title}`,`<div class="node-pad lesson">${sec.lesson}</div>`);
+  let vx=X+500, maxH=0; const vids=sec.visuals;
+  vids.forEach((vid,k)=>{ const s=addVisual(vid,vx,0); vx+=s.w+140; maxH=Math.max(maxH,s.h); LINKS.push([k?nodeOfVis(vids[k-1]):`${sec.id}-lesson`,nodeOfVis(vid)]); });
+  sec._qy=maxH+170;
+  sec.questions.forEach((q,qi)=>{ const id=`${sec.id}-q${qi}`; const n=addNode(id,X+150,sec._qy+qi*340,560,`Question ${qi+1} of ${sec.questions.length}`,questionHtml(q),'locked'); wireQuestion(n,q,ok=>onAnswer(ok)); });
+  addNode(`${sec.id}-rev`,X+800,sec._qy,520,'Quick revision','<div class="node-pad"></div>','hidden');
+  LINKS.push([nodeOfVis(vids[vids.length-1]),`${sec.id}-q0`]);
+  sec.questions.forEach((q,qi)=>{ if(qi) LINKS.push([`${sec.id}-q${qi-1}`,`${sec.id}-q${qi}`]); });
+  LINKS.push([`${sec.id}-q${sec.questions.length-1}`,`${sec.id}-rev`,true]);
+  X=Math.max(vx+260,X+1600);
+});
+LESSON.sections.forEach((sec,si)=>{ const next=si<LESSON.sections.length-1?`${LESSON.sections[si+1].id}-lesson`:'done'; LINKS.push([nodeOfVis(sec.visuals[sec.visuals.length-1]),next,true]); });
+addNode('done',X,0,460,'Finish',`<div class="node-pad"><h2>Topic complete</h2><p class="empty" id="doneText">Finish every section to see your score.</p></div>`);
+
+function layoutQuestions(){ LESSON.sections.forEach(sec=>{ let y=sec._qy; sec.questions.forEach((q,qi)=>{ const n=NODES[`${sec.id}-q${qi}`]; if(!n.moved){ n.y=y; n.el.style.top=y+'px'; } y=n.y+n.el.offsetHeight+80; }); }); drawLinks(); }
+
+/* ---------- questions ---------- */
+function questionHtml(q){
+  const body=q.type==='number'
+    ? `<div class="num">${q.prefix?`<span class="unit" style="font-size:20px;color:var(--ink)">${esc(q.prefix)}</span>`:''}<input type="number" inputmode="decimal" step="any" aria-label="Your answer">${q.unit?`<span class="unit">${esc(q.unit)}</span>`:''}<button class="btn" data-check>Check</button></div>`
+    : `<div class="opts">${q.options.map((o,i)=>`<button class="opt" data-i="${i}"><span class="key">${'ABCD'[i]}</span>${esc(o)}</button>`).join('')}</div>`;
+  return `<div class="node-pad"><div class="q-body"><h3>${esc(q.prompt)}</h3>${body}</div><div class="fb" role="status"></div><div class="q-actions" hidden><button class="btn" data-continue>Continue</button></div></div>`;
+}
+function wireQuestion(n,q,cb){
+  const root=n.el, fb=root.querySelector('.fb'), qa=root.querySelector('.q-actions'); let done=false;
+  const finish=ok=>{ done=true; fb.className='fb show '+(ok?'right':'wrong'); fb.innerHTML=`<strong>${ok?'Correct!':'Not quite.'}</strong>${esc(q.explain)}`; qa.hidden=false; root.querySelector('.q-body').style.pointerEvents='none'; layoutQuestions(); cb(ok); };
+  root.querySelector('[data-continue]').addEventListener('click',()=>advance());
+  if(q.type==='number'){ const inp=root.querySelector('input'), btn=root.querySelector('[data-check]');
+    const check=()=>{ if(done||inp.value==='') return; const ok=Math.abs(Number(inp.value)-q.answer)<1e-6; inp.classList.add(ok?'right':'wrong'); finish(ok); };
+    btn.addEventListener('click',check); inp.addEventListener('keydown',e=>{ if(e.key==='Enter') check(); }); }
+  else root.querySelectorAll('.opt').forEach(b=>b.addEventListener('click',()=>{ if(done) return; const i=+b.dataset.i, ok=i===q.answer;
+    root.querySelectorAll('.opt').forEach(o=>{ o.disabled=true; if(+o.dataset.i===q.answer) o.classList.add('right'); }); if(!ok) b.classList.add('wrong'); finish(ok); }));
+}
+
+/* =====================================================================
+   TUTOR
+   ===================================================================== */
+const bubble=$('bubble'), tutorEl=$('tutor'); let typing=null;
+function say(text,you){
+  if(typing) clearInterval(typing.id);
+  const head=you?`<span class="you">You asked: ${esc(you)}</span>`:'';
+  tutorEl.classList.add('talking'); let i=0; const out=()=>{ bubble.innerHTML=head+esc(text.slice(0,i)); };
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches){ i=text.length; out(); tutorEl.classList.remove('talking'); return; }
+  typing={id:setInterval(()=>{ i+=2; out(); if(i>=text.length){ clearInterval(typing.id); typing=null; tutorEl.classList.remove('talking'); } },22)};
+  typing.finish=()=>{ i=text.length; out(); };
+}
+bubble.addEventListener('click',()=>{ if(typing) typing.finish(); });
+const nextBtn=$('nextBtn'), backBtn=$('backBtn');
+const setNext=(label,en=true)=>{ nextBtn.textContent=label; nextBtn.disabled=!en; };
+
+/* =====================================================================
+   FLOW: lesson steps → quiz → revision (if needed) → next section
+   ===================================================================== */
+const S={sec:0,phase:'lesson',step:0,q:0,wrong:[],rev:[],ri:0,rsub:0,first:0,total:0,lastSay:''};
+const sec=()=>LESSON.sections[S.sec];
+function renderSteps(){
+  $('steps').innerHTML=LESSON.sections.map((s,i)=>{ const done=i<S.sec||S.phase==='done'; return `<button class="stepbtn ${i===S.sec&&S.phase!=='done'?'current':''} ${done?'done':''}" data-i="${i}"><span class="n">${done?'✓':i+1}</span><span class="lab">${esc(s.short)}</span></button>`; }).join('');
+}
+$('steps').addEventListener('click',e=>{ const b=e.target.closest('.stepbtn'); if(b) fly(`${LESSON.sections[+b.dataset.i].id}-lesson`); });
+const tsay=t=>{ S.lastSay=t; say(t); };
+const flyTarget=f=>f==='lesson'?`${sec().id}-lesson`:nodeOfVis(f);
+function runStep(){
+  const st=sec()._steps[S.step]; fly(flyTarget(st.fly));
+  if(st.show) VIS[st.show[0]].step(st.show[1]);
+  if(st.act) st.act(VAPI);
+  tsay(st.say); setNext(st.next||'Next'); backBtn.hidden=false; backBtn.disabled=S.step===0;
+}
+function startQuiz(){ S.phase='quiz'; S.q=0; S.wrong=[]; backBtn.hidden=true; showQuestion(); }
+function showQuestion(){ const id=`${sec().id}-q${S.q}`; NODES[id].el.classList.remove('locked'); fly(id);
+  tsay(S.q===0?'Here’s your first question. Pick the best answer.':'Next one. Take your time.'); setNext('Next question',false);
+  const f=NODES[id].el.querySelector('.opt, input'); f&&setTimeout(()=>f.focus({preventScroll:true}),800); }
+function onAnswer(ok){
+  if(S.phase==='quiz'){ const q=sec().questions[S.q]; S.total++; if(ok) S.first++; else S.wrong.push(q.concept);
+    tsay(ok?['Nice one!','Exactly right.','Spot on!'][S.q%3]+' '+q.explain:'Not quite. '+q.explain+' We’ll come back to this.');
+    setNext(S.q<sec().questions.length-1?'Next question':'Finish quiz',true); }
+  else if(S.phase==='revise'){ const c=sec().concepts[S.rev[S.ri]]; tsay(ok?'That’s it! You’ve got it now.':'Not quite, but that’s okay. '+c.retry.explain); setNext(S.ri<S.rev.length-1?'Next topic':'Continue',true); }
+}
+function endQuiz(){
+  if(!S.wrong.length){ tsay('Perfect score on this section! Let’s keep going.'); setNext(S.sec<LESSON.sections.length-1?'Next section':'See my results'); S.phase='between'; return; }
+  S.phase='revise'; S.rev=[...new Set(S.wrong)]; S.ri=0; S.rsub=0; runRevision();
+}
+function runRevision(){
+  const c=sec().concepts[S.rev[S.ri]];
+  if(S.rsub===0){ const target=c.show?nodeOfVis(c.show[0]):c.fly?flyTarget(c.fly):`${sec().id}-lesson`; fly(target);
+    if(c.show) VIS[c.show[0]].step(c.show[1]); if(c.act) c.act(VAPI); tsay(c.say); setNext('Try a question'); }
+  else { const node=NODES[`${sec().id}-rev`]; node.el.classList.remove('hidden');
+    node.el.querySelector('.node-pad').outerHTML=`<div class="node-pad"><div class="rev-kicker">Revising: ${esc(c.title)}</div></div>`;
+    const tmp=document.createElement('div'); tmp.innerHTML=questionHtml(c.retry); node.el.querySelector('.node-pad').append(...tmp.firstElementChild.childNodes);
+    wireQuestion(node,c.retry,ok=>onAnswer(ok)); drawLinks(); fly(node.id); tsay('Let’s try one like it.'); setNext('Continue',false); }
+}
+function finishSection(){
+  NODES[`${sec().id}-rev`].el.classList.add('hidden'); drawLinks();
+  if(S.sec<LESSON.sections.length-1){ S.sec++; S.phase='lesson'; S.step=0; renderSteps(); runStep(); }
+  else { S.phase='done'; renderSteps(); backBtn.hidden=true;
+    $('doneText').outerHTML=`<p><span class="done-score">${S.first}/${S.total}</span></p><p>You answered ${S.first} of ${S.total} questions right on the first try, and revised the rest. Explore the whole board to review anything.</p>`;
+    fly('done'); tsay(`You did it! You got ${S.first} out of ${S.total} right first time. Take a look around the whole board.`); setNext('See the whole board'); }
+}
+function advance(){
+  if(typing) typing.finish();
+  if(S.phase==='lesson'){ if(S.step<sec()._steps.length-1){ S.step++; runStep(); } else startQuiz(); }
+  else if(S.phase==='quiz'){ if(nextBtn.disabled) return; if(S.q<sec().questions.length-1){ S.q++; showQuestion(); } else endQuiz(); }
+  else if(S.phase==='between') finishSection();
+  else if(S.phase==='revise'){ if(nextBtn.disabled) return; if(S.rsub===0){ S.rsub=1; runRevision(); } else if(S.ri<S.rev.length-1){ S.ri++; S.rsub=0; runRevision(); } else finishSection(); }
+  else if(S.phase==='done') fitAll(900);
+}
+nextBtn.addEventListener('click',advance);
+backBtn.addEventListener('click',()=>{ if(S.phase==='lesson'&&S.step>0){ S.step--; runStep(); } });
+
+/* =====================================================================
+   LIVE TUTOR (Gemini via /api/tutor)
+   ===================================================================== */
+const history=[];
+function catalog(){ return Object.entries(LESSON.visuals).filter(([,d])=>d.steps).map(([id,d])=>({id,steps:d.steps.map(s=>s.slice(0,140))})); }
+function applyAction(a,first){
+  if(a.type==='show'){ const [vid,i]=String(a.target).split(':'); if(VIS[vid]){ VIS[vid].step(+i||0); if(first) fly(nodeOfVis(vid)); } return; }
+  if(LESSON.applyAction){ const vid=LESSON.applyAction(a,VAPI,sec()); if(vid&&first) fly(nodeOfVis(vid)); }
+}
+$('askForm').addEventListener('submit',async e=>{
+  e.preventDefault(); const inp=$('askInput'), msg=inp.value.trim(); if(!msg) return;
+  inp.value=''; $('askBtn').disabled=true; tutorEl.classList.add('thinking'); say('Let me think…',msg);
+  let question=''; if(S.phase==='quiz') question=sec().questions[S.q].prompt; if(S.phase==='revise'&&S.rsub===1) question=sec().concepts[S.rev[S.ri]].retry.prompt;
+  try{
+    const r=await fetch('/api/tutor',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,history,lesson:LESSON.id,
+      context:{section:sec().title,phase:S.phase,lesson:S.lastSay,question},catalog:LESSON.id==='cell'?[]:catalog()})});
+    const data=await r.json(); if(!r.ok) throw new Error(data.error||'error');
+    history.push({role:'user',text:msg},{role:'model',text:data.reply}); if(history.length>12) history.splice(0,2);
+    const answering=S.phase==='quiz'||(S.phase==='revise'&&S.rsub===1);
+    (data.actions||[]).forEach((a,i)=>applyAction(a,i===0&&!answering)); say(data.reply||'Hmm, I’m not sure. Try asking another way.',msg);
+  }catch(err){ say('I couldn’t reach the live tutor just now. If you opened this file directly, deploy it to Vercel first. Otherwise, try again in a moment.',msg); }
+  finally{ $('askBtn').disabled=false; tutorEl.classList.remove('thinking'); }
+});
+
+/* ---------- lesson switcher ---------- */
+$('lessonName').textContent=LESSON.title;
+$('menu').innerHTML=ORDER.filter(id=>window.LESSONS[id]).map(id=>{ const L=window.LESSONS[id]; return `<a role="menuitem" href="?lesson=${id}" aria-current="${L===LESSON}">${esc(L.title)}<span>${esc(L.grade)}</span></a>`; }).join('');
+$('switchBtn').addEventListener('click',e=>{ e.stopPropagation(); const sw=$('switch'); sw.classList.toggle('open'); $('switchBtn').setAttribute('aria-expanded',sw.classList.contains('open')); });
+document.addEventListener('click',()=>{ $('switch').classList.remove('open'); $('switchBtn').setAttribute('aria-expanded','false'); });
+
+/* =====================================================================
+   LOOP + START
+   ===================================================================== */
+let last=performance.now();
+let tick=0;
+function loop(now){ const dt=Math.min(0.05,(now-last)/1000); last=now; K.stepTweens(now); tick++;
+  const focused=world.classList.contains('focus-mode');
+  Object.entries(VIS).forEach(([vid,v])=>{ const active=NODES[nodeOfVis(vid)].el.classList.contains('active'); const live=focused?active:(tick%3===0); v.frame(focused?dt:Math.min(0.15,dt*3),now/1000,now,live); });
+  requestAnimationFrame(loop); }
+LESSON.sections.forEach(s=>s.visuals.forEach(v=>VIS[v].step(0)));
+window.lessonApp={VIS,VAPI,fly,applyAction,state:S,advance};
+applyCam(); layoutQuestions(); renderSteps();
+if(document.fonts) document.fonts.ready.then(layoutQuestions);
+requestAnimationFrame(()=>{ fitAll(1); setTimeout(()=>{ runStep(); warmUp(); },1100); });
+/* start the remaining 3D models one at a time in the background */
+function warmUp(){ const q=Object.values(VIS).filter(v=>v.ensure&&!v.v); const next=()=>{ const v=q.shift(); if(!v) return; v.ensure(); setTimeout(next,1500); }; setTimeout(next,1500); }
+requestAnimationFrame(loop);
+addEventListener('resize',()=>{ if(focusId) fly(focusId); });
+})();
+</script>
+</body>
+</html>
