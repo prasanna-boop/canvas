@@ -1,30 +1,46 @@
-# 2.1 The Cell — interactive tutor (MVP)
+# Interactive science lessons (MVP)
 
-## What's in here
-- `index.html` — the whole app: canvas, tutor, 3D models, lessons, quizzes and branching.
-- `tutor.png` — the tutor avatar.
-- `api/tutor.js` — a small server function that holds your Gemini key and answers students' questions.
+Four lessons run on one shared engine:
+
+- 2.1 The Cell (Grade 8)
+- 2.2 Movement of materials in and out of the cell (Grade 8)
+- 1.1 Elements and compounds (Grade 8)
+- 3.2 Waves (Grade 9)
+
+Switch lessons with the menu at the top of the screen, or link straight to one with
+`?lesson=cell`, `?lesson=movement`, `?lesson=elements` or `?lesson=waves`.
+
+## What's in the folder
+
+- `index.html`: the engine (canvas, tutor, quizzes, revision, lesson switcher).
+- `engine/kit.js`: shared building blocks for 3D models and flat pictures.
+- `lessons/*.js`: one file per lesson, with its lesson cards, visuals, tutor lines, questions and revision.
+- `api/tutor.js`: the server function that holds your Gemini key and keeps the live tutor to each lesson's notes.
+- `tutor.png`: the tutor avatar.
 
 ## Deploy to Vercel
-1. Push this folder to a GitHub repo, then in Vercel choose **Add New → Project** and import it.
-   (Or install the Vercel CLI and run `vercel` inside this folder.)
-2. In the project, open **Settings → Environment Variables** and add:
-   - `GEMINI_API_KEY` = your Gemini API key
-   - optional: `GEMINI_MODEL` (defaults to `gemini-flash-latest`)
-3. Redeploy so the variable takes effect. Done.
 
-The key stays on the server. It never appears in the page students load.
+1. Push this folder to your GitHub repo (the contents, so `index.html` sits at the top level).
+2. In Vercel, choose **Add New → Project** and import the repo.
+3. Under **Settings → Environment Variables**, add `GEMINI_API_KEY` (and optionally `GEMINI_MODEL`, default `gemini-flash-latest`).
+4. Redeploy. Every push to GitHub redeploys automatically after that.
+
+The key stays on the server and never reaches students' browsers.
 
 ## Run it locally
-`npx vercel dev` in this folder runs the page and the tutor function together.
-Opening `index.html` directly works for everything except live questions.
 
-## Editing the lesson
-All lesson text, tutor lines, questions and revision content live in the `SECTIONS` array near the top of
-`index.html`. Each section has `steps` (what the tutor says and what the 3D model does), `questions`
-(each tagged with a `concept`), and `concepts` (the revision explanation and retry question used when a
-student misses that concept).
+- Without the live tutor: `python3 -m http.server 8000` in this folder, then open http://localhost:8000
+- With the live tutor: `npx vercel dev` in this folder, with a `.env` file containing `GEMINI_API_KEY=...` (never commit that file).
+
+## Adding or editing a lesson
+
+Copy one of the files in `lessons/`, change the content, add a `<script>` tag for it in `index.html`,
+and add its id to the `ORDER` list near the top of the engine script. Each section lists its `visuals`,
+its `questions` (each tagged with a `concept`) and its `concepts` (the revision explanation and retry question).
+Visuals with `steps` are walked through automatically by the tutor. Also add the lesson's notes to
+`NOTES` in `api/tutor.js` so the live tutor stays on topic.
 
 ## Before a wider rollout
-- Add rate limiting to `api/tutor.js` (for example with Vercel's firewall rules) so the key can't be overused.
-- The layout is built for laptops and tablets; phones work but the 3D models are small.
+
+- Add rate limiting to the tutor function (for example with Vercel's firewall rules) so the key can't be overused.
+- Built for laptops and tablets. Phones work, but the visuals are small.
